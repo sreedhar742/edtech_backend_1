@@ -47,7 +47,7 @@ class StudentManager(BaseUserManager):
             extra_fields.setdefault('is_staff', True)
             extra_fields.setdefault('is_superuser', True)
             extra_fields.setdefault('is_student', False)
-
+            extra_fields.setdefault('is_teacher', False)
             # Use the create_user method to create the superuser
             account = self.create_user(fullname,email, roll_number, phone_number, username, password, **extra_fields)
             account.save(using=self._db)
@@ -56,7 +56,7 @@ class StudentManager(BaseUserManager):
 
 class Student(AbstractBaseUser):
     fullname = models.CharField(max_length=50, blank=True, null=True)
-    roll_number = models.CharField(max_length=50, unique=True)
+    roll_number = models.CharField(max_length=50)
     phone_number = models.CharField(max_length=15)
     username = models.CharField(max_length=100,unique=True, blank=True, null= True)
     email = models.EmailField(blank=True, null=True)
@@ -69,7 +69,7 @@ class Student(AbstractBaseUser):
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
     is_student = models.BooleanField(default=True)
-
+    is_teacher = models.BooleanField(default=False)
 
     # Use the custom StudentManager
     objects = StudentManager()
