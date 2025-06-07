@@ -139,3 +139,68 @@ class GapAnalysis(models.Model):
     def __str__(self):
         return f"{self.student.fullname} - {self.class_name} - {self.subject} - Chapter {self.chapter_number}"
 
+class Homework(models.Model):
+    title = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+    
+    # Link to teacher who created it
+    teacher = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        limit_choices_to={'is_teacher': True},
+        related_name='homeworks'
+    )
+    # Link to class and subject
+    # class_ref = models.ForeignKey(classes, on_delete=models.CASCADE, related_name='homeworks')
+    # subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='homeworks')
+    # topic = models.ForeignKey(Topics, on_delete=models.CASCADE, related_name='homeworks')
+    # subtopic = models.ForeignKey(SubTopics, on_delete=models.CASCADE, related_name='homeworks', null=True, blank=True)
+
+    due_date = models.DateTimeField(null=True, blank=True)
+    date_assigned = models.DateTimeField(auto_now_add=True)
+    
+    # Attachments or links (optional)
+    attachment = models.TextField(null=True, blank=True)
+    homework_code = models.CharField(max_length=100, unique=True, blank=True)
+
+    def __str__(self):
+        return f"{self.title}"
+
+    class Meta:
+        ordering = ['-date_assigned']
+
+
+class Notification(models.Model):
+    sender = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        limit_choices_to={'is_teacher': True},
+        related_name='sent_notifications'
+    )
+    message = models.TextField()
+    homework = models.ForeignKey(
+        Homework,
+        on_delete=models.CASCADE,
+        related_name='notifications'
+    )
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Notification from {self.sender.username} about {self.homework.title}"
+
+
+class HomeworkSubmission(models.Model):
+    homework = models.ForeignKey(
+        Homework,
+        to_field='homework_code',  # Use the custom code
+        on_delete=models.CASCADE,
+        related_name='submissions'
+    )    
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='homework_submissions')
+    submission_date = models.DateTimeField(auto_now_add=True)
+    submitted_file = models.TextField(null=True, blank=True)  # Base64 encoded file or link
+    score = models.IntegerField(null=True, blank=True)
+    feedback = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.student.fullname} - {self.homework.title} Submission"

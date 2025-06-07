@@ -39,15 +39,16 @@ class ClassListView(APIView):
     def get(self, request):
         try:
             # Get all classes
-            class_objects = classes.objects.all()
+            class_objects = classes.objects.all().order_by('class_code')
             # class_objects = classes.objects.filter(class_code="10")
             # Serialize the data
             serializer = ClassSerializer(class_objects, many=True)
+            sorted_data = sorted(serializer.data, key=lambda x: int(x['class_code']))  # Sort by class_code as integer
             
             return Response({
                 "status": "Success",
                 "message": "Classes retrieved successfully",
-                "data": serializer.data
+                "data": sorted_data
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
@@ -314,63 +315,98 @@ class AnswerSubmit(APIView):
     
     
     # Explain 
+    import requests
+    import json
+    import re
+
     def Ai_Explaination(self, class_nums, question):
         url = "http://128.199.19.226:8080/api/generate-concepts-required/"
         print(class_nums, question)
+
         data = {
             "question": question,
             "class_nums": [class_nums],
-            "student_level": 2
+            "student_level": 3
         }
-        response = requests.post(url, json=data)
-        print(response)
-        print(response.text)
-        if response.status_code == 200:
-            if response.headers.get('Content-Type') == 'application/json':
-                
-                json_data = response.json()
-                # data = new_replace_curly_quotes(response.json())
-                print(json_data)
-                question = json_data.get('question', '')
-                step_by_step_solution = json_data.get('step_by_step_solution', [])
-                concepts_required = json_data.get('concepts_required', [])
-                # print(step_by_step_solution)
-                concepts = []
-                for concept in concepts_required:
-                    # print(concept['concept_example'])
+
+        try:
+            response = requests.post(url, json=data)
+
+            if response.status_code == 200 or response.status_code == 500:
+                if response.headers.get('Content-Type') == 'application/json':
+                    json_data = response.json()
                     
-                    concept_dict = {
-                        "concept": concept['concept_name'],
-                        "explanation": concept['concept_description'],
-                        "example": concept['concept_example'],
-                        'chapter':concept['chapter_name']
-                        # "example-2": concept['concept_example']  # Using the same example for simplicity
-                    }
-                    
-                    concepts.append(concept_dict)
-                    # print(concept_dict['example'])
-                step_solution=[]
-                for step in step_by_step_solution:
-                    step_solution.append(step['step'])
-                # Construct the final output
-                output = {
-                    
-                        "question": f"1. {question}",
-                        # "ai_explaination": explanation,
+                    # Process question and step-by-step solution
+                    # question = json_data.get('question', '')
+                    step_by_step_solution = json_data.get('step_by_step_solution', [])
+                    if response.status_code == 500:
+                        concepts_raw = json_data.get('raw_content', '[]')
+                    else:
+                        concepts_raw = json_data.get('concepts_required', '[]')
+
+                    # Parse concepts_required safely
+                    if isinstance(concepts_raw, str):
+                        try:
+                            cleaned = re.sub(r'^```json\s*|\s*```$', '', concepts_raw.strip())
+
+                            escaped_cleaned = cleaned.replace('\\', '\\\\')
+
+                            # Now parse safely
+                            concepts_required = json.loads(escaped_cleaned)
+                        except json.JSONDecodeError as e:
+                            print("Failed to parse concepts_required:", e)
+                            concepts_required = []
+                    else:
+                        concepts_required = concepts_raw
+                    # Extract concept details
+                    concepts = []
+                    for concept in concepts_required:
+                        try:
+                            concept_dict = {
+                                "concept": concept['concept_name'],
+                                "explanation": concept['concept_description'],
+                                "example": concept['concept_example'],
+                                "chapter": concept['chapter_name']
+                            }
+                            concepts.append(concept_dict)
+                        except Exception as e:
+                            print("Error processing concept:", e)
+
+                    new_stepss = []
+                    try:
+                        if "$" in question:
+                            new_string = json.loads(step_by_step_solution[0]['step'].replace('\\', '\\\\'))
+                            new_string_dict = new_string['step_by_step_solution']
+                            for ste in new_string_dict:
+                                new_stepss.append(ste['step'])
+                        else:
+                            for steps in step_by_step_solution:
+                                new_stepss.append(steps['step'])
+                    except Exception as e:
+                        print("Error processing steps:", e)
+                        new_stepss = []
+
+                    # Final output structure
+                    output = {
+                        "question": question,
                         "obtained_marks": 0,
                         "question_marks": 3,
                         "total_marks": 30,
                         "concepts": concepts,
                         "key": "explain",
-                        "solution":step_solution
+                        "solution": new_stepss
                     }
-                
+                    print("Output:", output)    
+                    return output
 
-                return output
-                    
-        else:
-            return {'error': 'Failed to retrieve data from external API'}
- 
+            else:
+                print("Non-200 response:", response.status_code)
+                return {"error": "API call failed", "status": response.status_code}
+
+        except Exception as e:
+            print("Exception occurred:", e)
+            return {"error": str(e), "status": 500}
+
     # Explain - step - by - step
     def Ai_Explaination_step_by_step(self, class_nums, question):
         
@@ -381,11 +417,14 @@ class AnswerSubmit(APIView):
         }
         
         response = requests.post(url, json=data)
+        print("response status code :",response.status_code)
+        print("response is :",response)
+        print("response_text is :",response.text)
         
         if response.status_code == 200:
             if response.headers.get('Content-Type') == 'application/json':
                 json_data = response.json()
-                print(json_data)
+                # print(json_data)
                 # data = n ew_replace_curly_quotes(response.json())
                 # print(json_data['step_by_step_solution'],"=====---json_data['step_by_step_solution']---====")
                 return json_data['step_by_step_solution']
@@ -484,10 +523,9 @@ class AnswerSubmit(APIView):
                     print(f"Failed to delete temporary file: {str(e)}")
     
     def post(self, request, *args, **kwargs):
-        print(request.headers)
         
         session_key = request.headers.get('SessionKey')
-        print(request.POST)
+
         class_id = request.POST.get('class_id')
         subject_id = request.POST.get('subject_id')
         question = request.POST.get('question')
@@ -631,13 +669,21 @@ class AnswerSubmit(APIView):
         elif solve=='true':
            
             ai_explaination = self.Ai_Explaination_step_by_step([int(class_obj.class_name)], question)
-            
-            new_steps=[]
-            for steps in ai_explaination:
-                new_steps.append(steps['step'])
-            ai_explaination = new_steps
+
+            new_stepss=[]
+            if "$" in question:
+                new_string = json.loads(ai_explaination[0]['step'].replace('\\', '\\\\'))
+                new_string_dict=new_string['step_by_step_solution']
+                new_stepss=[]
+                for ste in new_string_dict:
+                    new_stepss.append(ste['step'])  
+            else:
+                new_stepss=[]
+                for steps in ai_explaination:
+                    new_stepss.append(steps['step'])
+            ai_explaination = new_stepss
             data['question'] = question
-            data['ai_explaination'] = ai_explaination
+            data['ai_explaination'] = new_stepss
             data['obtained_marks'] = 0
 
             data['question_marks'] = 10
@@ -834,27 +880,198 @@ class QuestionWithImageUploadView(APIView):
         print("successfully uploaded")
         return Response({"message": "Questions with images uploaded successfully."}, status=status.HTTP_201_CREATED)
 
+
+import base64
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="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",
+)
+
+def extract_question_from_base64(image_binary):
+    # Read and encode the image as base64
+    
+    encoded_image = image_binary
+
+    # Create GPT-4o chat completion with vision
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "You are an OCR assistant. Extract question text only."},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{encoded_image}"
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": "Please extract all readable text from this image and format it as a JSON object."
+                    }
+                ]
+            }
+        ]
+    )
+    response_text=response.choices[0].message.content
+    if response_text.startswith("```json"):
+        response_text = re.sub(r"^```json\s*|\s*```$", "", response_text, flags=re.DOTALL).strip()
+    try:
+        parsed_json = json.loads(response_text)
+    except json.JSONDecodeError as e:
+        print("❌ Failed to parse JSON:", e)
+        print("🔍 Raw response was:\n", response_text)
+        return {"error": "Invalid JSON returned from GPT", "raw": response_text}
+
+    return parsed_json
+
+
+
 class ChatbotAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
         message = request.data.get('message')
-        quote="try to act like an chatbot and give the answer in addition don't user python keyword or pythonic solution"
-        if not message:
-            return Response({"error": "Message is required."}, status=status.HTTP_400_BAD_REQUEST)
-        BASE_URL = "http://139.59.86.115/api/generate-step-by-step-solution/"
+        # print(message)
+        question_text = request.data.get('question_text')
+        # print(request.data)
+        # quote="try to act like an chatbot and give the answer in addition don't user python keyword or pythonic solution"
+        if message=="solve":
+            BASE_URL = "http://128.199.19.226:8080/api/generate-step-by-step-solution/"
         # BASE_URL = "http://139.59.86.115/api/generate-concepts-required/"
-        class_nums = [10]
-        data = {
-            "question": quote+message,
-            "class_nums": [class_nums]
-        }
-        response = requests.post(BASE_URL, json=data)  
-        print(response)
-        if response.status_code == 200:
-            response_data = response.json()
-            return Response(response_data, status=status.HTTP_200_OK)   
-        else:
+            class_nums = [10]
+            data = {
+                "question": question_text,
+                "class_nums": [class_nums]
+            }
+            if "$" in question_text:
+                class_nums=12
+            else:
+                class_nums=10
+            
+            response = requests.post(BASE_URL, json=data)  
+            # print(response)
+            if response.status_code == 200:
+                response = response.json()
+     
+                response_data=response['step_by_step_solution']
+                new_stepss=[]
+                if class_nums==12:
+                    new_string = json.loads(response_data[0]['step'].replace('\\', '\\\\'))
+                    new_string_dict=new_string['step_by_step_solution']
+                    new_stepss=[]
+                    for ste in new_string_dict:
+                        new_stepss.append(ste['step'])  
+                # print(type(new_string))
+                # print(new_string)
+                
+                # print(ai_explaination[0]['step']['step_by_step_solution'])
+                # print(ai_explaination)
+                else:
+                    new_stepss=[]
+                    for steps in response_data:
+                        new_stepss.append(steps['step'])
+                final_solution = {'step_by_step_solution': new_stepss}
+
+                return Response(final_solution, status=status.HTTP_200_OK)
+        if message=="explain":  
+            BASE_URL = "http://128.199.19.226:8080/api/generate-concepts-required/"
+        # BASE_URL = "http://139.59.86.115/api/generate-concepts-required/"
+            class_nums = [10]
+            data = {
+                "question": question_text,
+                "class_nums": [class_nums],
+                "student_level": 2
+            }
+            response = requests.post(BASE_URL, json=data)  
+            # print(response)
+            if response.status_code == 200:
+                response_data = response.json()
+                
+                concepts = response_data['concepts_required']
+                step_by_step_concepts=[]
+                for idx,concepts in enumerate(concepts):
+                    number=idx+1
+                    conceptname="concept_name_"+str(idx+1)+"\n"+concepts['concept_name']
+                    step_by_step_concepts.append(conceptname)
+                    conceptdescription="concept_description: \n"+concepts['concept_description']
+                    step_by_step_concepts.append(conceptdescription)
+                    conceptexample="concept_example: \n"+concepts['concept_example']
+                    step_by_step_concepts.append(conceptexample)
+                final_solution={'step_by_step_solution': step_by_step_concepts}
+                return Response(final_solution, status=status.HTTP_200_OK) 
+        if request.FILES.get('ans_img') and message=="correct":
+            blank_file="iVBORw0KGgoAAAANSUhEUgAAB4AAAAQ4CAYAAADo08FDAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAACiySURBVHhe7dkBDQAADMOg+ze9+2jABjcAAAAAAAAAEgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAACQsD3xz9NpPFRbdgAAAABJRU5ErkJggg=="
+
+            if 'ques_img' in request.POST:
+                q_image_binary= request.POST.get('ques_img')
+            else:
+                q_image_binary = blank_file
+
+            if 'ans_img' in request.FILES:
+                image = request.FILES.get('ans_img')
+                image_binary = base64.b64encode(image.read()).decode('utf-8')
+            else:
+                image_binary = "image not submitted"
+            correct_obj=AnswerSubmit()
+            comment=correct_obj.autoscore(image_binary,question_text,q_image_binary)
+            
+            correct_solution=[comment['comment']]
+            final_solution={'step_by_step_solution': correct_solution}                
+            return Response(final_solution, status=status.HTTP_200_OK)
+        
+        if request.FILES.get('ans_img'):
+            if 'ans_img' in request.FILES:
+                image = request.FILES.get('ans_img')
+                image_binary = base64.b64encode(image.read()).decode('utf-8')
+            output=extract_question_from_base64(image_binary)
+            print(output)
+            print(type(output))
+            question=""
+            for key,value in output.items():
+                question+=output[key]
+                
+            BASE_URL = "http://128.199.19.226:8080/api/generate-step-by-step-solution/"
+            class_nums = [10]
+            data = {
+                "question": question,
+                "class_nums": [class_nums]
+            }
+            response = requests.post(BASE_URL, json=data)  
+            # print(response)
+            if response.status_code == 200:
+                response_data = response.json()
+                print(response_data)
+                solution=[]
+                for steps in response_data['step_by_step_solution']:
+                    solution.append(steps['step'])
+                final_solution = {'step_by_step_solution': solution}
+
+                return Response(final_solution, status=status.HTTP_200_OK)
+            
+            
+        if message:
+            BASE_URL = "http://128.199.19.226:8080/api/generate-step-by-step-solution/"
+        # BASE_URL = "http://139.59.86.115/api/generate-concepts-required/"
+            class_nums = [10]
+            data = {
+                "question": message,
+                "class_nums": [class_nums]
+            }
+            response = requests.post(BASE_URL, json=data)  
+            # print(response)
+            if response.status_code == 200:
+                response_data = response.json()
+                print(response_data)
+                solution=[]
+                for steps in response_data['step_by_step_solution']:
+                    solution.append(steps['step'])
+                final_solution = {'step_by_step_solution': solution}
+
+                return Response(final_solution, status=status.HTTP_200_OK)
+        else:   
             return Response({"error": "Failed to retrieve data from external API."}, status=response.status_code)
 
 from random import sample
@@ -910,6 +1127,7 @@ class QuestionImageview(APIView):
                 ).order_by('?')[:]
                 all_questions.extend(questions)
             print(all_questions)
+            all_questions = sorted(all_questions, key=lambda q: q.question)
             serializer = QuestionWithImageSerializer(all_questions, many=True)
             return Response({"questions": serializer.data})
         
@@ -931,20 +1149,11 @@ class QuestionImageview(APIView):
         serializer = QuestionWithImageSerializer(all_questions, many=True)
         return Response({"questions": serializer.data})
 
-# class SameQuestions(APIView):
-#     permission_classes=[IsAuthenticated]
-#     def post(self,request,*args,**kwargs):  
-#         question=request.data.get('question')
-#         if question:
-#             #generate these typed of questions
-#             print("llm call")
-#         else:
-#             return Response({"status":"please send the question"})
-            
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 
 import re
+apikey=""
 class SimilarQuestionsAPIView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -961,7 +1170,14 @@ class SimilarQuestionsAPIView(APIView):
             SystemMessage(content=system_prompt),
             HumanMessage(content=f"Original question: {question}")
         ]
-        
+        # print(response)
+        try:
+            print("hello")
+            response = llm.invoke(messages)
+            return response.content
+        except Exception as e:
+            print("🔥 Error from LLM:", str(e))
+            return Response({"error": str(e)}, status=500)
         response = llm.invoke(messages)
         return response.content
     
@@ -1202,7 +1418,7 @@ class UserAverageScoreAPIView(APIView):
 
         if not chapter_numbers:
             return Response({"error": "No gap analysis data found for the user."}, status=status.HTTP_404_NOT_FOUND)
-
+        
         average_scores = {}
         for chapter_number in chapter_numbers:
             # Filter GapAnalysis objects for the current user and chapter
@@ -1214,12 +1430,13 @@ class UserAverageScoreAPIView(APIView):
             if gap_analysis_objects.exists():
                 # Calculate the average score for the chapter
                 # print(total_score)
-                total_score = sum(obj.student_score for obj in gap_analysis_objects)
+                total_score = sum(getattr(obj, 'student_score', 0) or 0 for obj in gap_analysis_objects)
+                # print(total_score)     
                 average_score = total_score / gap_analysis_objects.count()
                 average_scores[chapter_number] = average_score
             else:
                 average_scores[chapter_number] = 0  # Or handle the case where there's no data for the chapter
-
+        print(average_scores)
         return Response(average_scores, status=status.HTTP_200_OK)
     
     
@@ -1270,3 +1487,161 @@ class AllStudentGapAnalysisAPIView(APIView):
                 "status": "error",
                 "message": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            
+class LeaderboardApiView(APIView):
+    
+    def get(self, request, *args, **kwargs):
+        """
+        API endpoint to retrieve the leaderboard data for all students.
+        Returns a list of students with their average scores, sorted by score in descending order.
+        """
+        try:
+            # Get all students
+            students = Student.objects.filter(is_student=True).order_by('username')
+            
+            # Prepare the leaderboard data
+            leaderboard_data = []
+
+            for student in students:
+                # Calculate the average score for each student
+                gap_analysis_records = GapAnalysis.objects.filter(student=student)
+                if gap_analysis_records.exists():
+                    total_score = sum(getattr(record, 'student_score', 0) or 0 for record in gap_analysis_records)
+                    average_score = total_score / gap_analysis_records.count()
+                else:
+                    average_score = 0
+                
+                leaderboard_data.append({
+                    'student_id': student.id,
+                    'username': student.username,
+                    'average_score': average_score
+                })
+
+            # Sort the leaderboard data by average score in descending order
+            leaderboard_data.sort(key=lambda x: x['average_score'], reverse=True)
+
+            return Response({
+                "status": "success",
+                "data": leaderboard_data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+
+
+
+from .models import Homework
+from .serializers import HomeworkSerializer
+
+class AddHomeworkAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        print(request.data)
+        teacher = request.user
+        if not getattr(teacher, 'is_teacher', False):
+            return Response({"error": "Only teachers can add homework."}, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = HomeworkSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(teacher=teacher)
+            return Response({"message": "Homework added successfully.", "data": serializer.data}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+from myapp.models import Notification
+from myapp.serializers import NotificationSerializer
+
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+
+
+from myapp.models import Notification
+from myapp.serializers import NotificationSerializer
+
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+
+class StudentNotificationsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Only allow students to access this endpoint
+        if getattr(request.user, 'is_teacher', False):
+            return Response(
+                {"detail": "Not authorized. This endpoint is for students only."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        student = request.user
+
+        # Get the last notification where sender and student belong to the same class
+        notification = Notification.objects.filter(
+            sender__class_name=student.class_name
+        ).order_by('-timestamp').first()
+
+        if notification:
+            # Check if the student has already submitted this homework
+            from .models import HomeworkSubmission
+            has_submitted = HomeworkSubmission.objects.filter(
+                homework=notification.homework,
+                student=student
+            ).exists()
+            if has_submitted:
+                return Response(
+                    {"message": "No notifications found."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            serializer = NotificationSerializer(notification)
+            return Response(serializer.data)
+        else:
+            return Response(
+                {"message": "No notifications found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+from .models import HomeworkSubmission
+from .serializers import HomeworkSubmissionSerializer
+
+class HomeworkSubmissionAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        data = request.data
+
+        print(request.data)
+        homework_code = data.get('homework_code')
+        submitted_file = data.get('submitted_file')
+        score = data.get('score')  # Optional
+        feedback = data.get('feedback')  # Optional
+
+        try:
+            homework = Homework.objects.get(homework_code=homework_code)
+        except Homework.DoesNotExist:
+            return Response({"error": "Invalid homework code."}, status=status.HTTP_400_BAD_REQUEST)
+
+        submission = HomeworkSubmission.objects.create(
+            homework=homework,
+            student=request.user,
+            submitted_file=submitted_file,
+            score=score,
+            feedback=feedback
+        )
+
+        return Response({
+            "message": "Homework submitted successfully.",
+            "submission_id": submission.id
+        }, status=status.HTTP_201_CREATED)
+
+    def get(self, request, *args, **kwargs):
+        submissions = HomeworkSubmission.objects.filter(student=request.user)
+        serializer = HomeworkSubmissionSerializer(submissions, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

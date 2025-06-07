@@ -161,12 +161,12 @@ CORS_ALLOW_HEADERS = [
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
 # Set session expiration to 1 hour (3600 seconds)
-SESSION_COOKIE_AGE = 1209600
+SESSION_COOKIE_AGE = 604800  # 1 week in seconds
 
 # Ensure the session expires when the browser is closed
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 
-# Optional: Enable session security
+# Optional: Enable session securityf
 SESSION_SAVE_EVERY_REQUEST = True
 AUTH_USER_MODEL = 'Users.Student'
 

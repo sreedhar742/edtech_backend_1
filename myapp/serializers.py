@@ -97,3 +97,25 @@ class GapAnalysisSerializer(serializers.ModelSerializer):
     class Meta:
         model = GapAnalysis
         fields = '__all__'
+        
+from myapp.models import Homework,Notification
+
+class HomeworkSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Homework
+        fields = ['title', 'description', 'due_date', 'date_assigned', 'attachment', 'homework_code']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    homework = HomeworkSerializer()  # nested
+
+    class Meta:
+        model = Notification
+        fields = ['message', 'homework', 'timestamp']
+
+from .models import HomeworkSubmission
+
+class HomeworkSubmissionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HomeworkSubmission
+        fields = '__all__'

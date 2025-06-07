@@ -387,3 +387,81 @@ class AnswerSubmit(APIView):
 
         # except Exception as e:
         #     return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+
+    def Ai_Explaination(self, class_nums, question):
+        url = "http://128.199.19.226:8080/api/generate-concepts-required/"
+#        url = "http://139.59.86.115/api/generate-concepts-required/"
+        print(class_nums, question)
+        data = {
+            "question": question,
+            "class_nums": [class_nums],
+            "student_level": 2
+        }
+        response = requests.post(url, json=data)
+        print(response)
+        print(response.text)
+        if response.status_code == 200:
+            if response.headers.get('Content-Type') == 'application/json':
+
+                json_data = response.json()
+                # data = new_replace_curly_quotes(response.json())
+
+                question = json_data.get('question', '')
+                step_by_step_solution = json_data.get('step_by_step_solution', [])
+                concepts_required = json_data.get('concepts_required', [])
+                # print(step_by_step_solution)
+                concepts = []
+                for concept in concepts_required:
+                    # print(concept['concept_example'])
+
+                    concept_dict = {
+                        "concept": concept['concept_name'],
+                        "explanation": concept['concept_description'],
+                        "example": concept['concept_example'],
+                        'chapter':concept['chapter_name']
+                        # "example-2": concept['concept_example']  # Using the same example for simplicity
+                    }
+
+                    concepts.append(concept_dict)
+                    # print(concept_dict['example'])
+                new_stepss=[]
+
+                if "$" in question:
+                    new_string = json.loads(step_by_step_solution[0]['step'].replace('\\', '\\\\'))
+                    new_string_dict=new_string['step_by_step_solution']
+                    new_stepss=[]
+                    for ste in new_string_dict:
+                        new_stepss.append(ste['step'])
+                    # print(new_stepss)
+                # print(type(new_string))
+                # print(new_string)
+
+                # print(ai_explaination[0]['step']['step_by_step_solution'])
+                # print(ai_explaination)
+                else:
+                    new_stepss=[]
+                    for steps in step_by_step_solution:
+                        new_stepss.append(steps['step'])
+                    ai_explaination = new_stepss
+                # Construct the final output
+                output = {
+
+                        "question": f"1. {question}",
+                        # "ai_explaination": explanation,
+                        "obtained_marks": 0,
+                        "question_marks": 3,
+                        "total_marks": 30,
+                        "concepts": concepts,
+                        "key": "explain",
+                        "solution":new_stepss
+                    }
+
+
+                return output
+
+        else:
+            return {'error': 'Failed to retrieve data from external API'}
