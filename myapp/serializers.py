@@ -90,7 +90,7 @@ class StudentSubmitsSerializer(serializers.ModelSerializer):
 class QuestionWithImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuestionWithImage
-        fields = ['question','question_image']
+        fields = ['question','question_image','level']
         
         
 class GapAnalysisSerializer(serializers.ModelSerializer):
@@ -119,3 +119,59 @@ class HomeworkSubmissionSerializer(serializers.ModelSerializer):
     class Meta:
         model = HomeworkSubmission
         fields = '__all__'
+        
+        
+# Add this to your serializers.py file
+
+from rest_framework import serializers
+from .models import Worksheet
+
+class WorksheetSerializer(serializers.ModelSerializer):
+    # teacher_username = serializers.CharField(source='teacher.username', read_only=True)
+    
+    class Meta:
+        model = Worksheet
+        fields = [
+            'worksheet_name',
+            'question',
+            'question_image',
+            'date_created',
+            'due_date'
+        ]
+        read_only_fields = ['id', 'teacher', 'date_created']
+class WorksheetNameSerializer(serializers.ModelSerializer):
+    """Serializer for creating or updating worksheet names"""
+    class Meta:
+        model = Worksheet
+        fields = ['id', 'worksheet_name']
+
+class WorksheetListSerializer(serializers.ModelSerializer):
+    """Simplified serializer for listing worksheets without large question_image data"""
+    teacher_username = serializers.CharField(source='teacher.username', read_only=True)
+    question_preview = serializers.SerializerMethodField()
+    has_image = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Worksheet
+        fields = [
+            'id',
+            'teacher_username',
+            'class_code',
+            'subject_code',
+            'topic_code',
+            'worksheet_name',
+            'question_preview',
+            'has_image',
+            'date_created',
+            'due_date'
+        ]
+    
+    def get_question_preview(self, obj):
+        """Return first 100 characters of question"""
+        if obj.question:
+            return obj.question[:100] + '...' if len(obj.question) > 100 else obj.question
+        return None
+    
+    def get_has_image(self, obj):
+        """Return True if worksheet has an image, False otherwise"""
+        return bool(obj.question_image)

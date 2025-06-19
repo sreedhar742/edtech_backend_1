@@ -6,8 +6,8 @@ from .models import classes, Subject, Topics, SubTopics
 from rest_framework.permissions import IsAuthenticated
 # from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework import generics
-from .models import classes, Subject, Topics, SubTopics, Question_Answers,GapAnalysis
-from .serializers import ChapterSerializer, ClassSerializer, SubjectSerializer, TopicSerializer, SubTopicSerializer, InputSerializer,GapAnalysisSerializer
+from .models import classes, Subject, Topics, SubTopics, Question_Answers,GapAnalysis,Worksheet
+from .serializers import ChapterSerializer, ClassSerializer, SubjectSerializer, TopicSerializer, SubTopicSerializer, InputSerializer,GapAnalysisSerializer,WorksheetNameSerializer,WorksheetSerializer
 import json
 import requests
 import re
@@ -315,10 +315,6 @@ class AnswerSubmit(APIView):
     
     
     # Explain 
-    import requests
-    import json
-    import re
-
     def Ai_Explaination(self, class_nums, question):
         url = "http://128.199.19.226:8080/api/generate-concepts-required/"
         print(class_nums, question)
@@ -521,7 +517,9 @@ class AnswerSubmit(APIView):
                     os.unlink(temp_file.name)
                 except Exception as e:
                     print(f"Failed to delete temporary file: {str(e)}")
-    
+    def get_default_image_base64(self):
+        with open('myapp/default_image.jpg', 'rb') as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
     def post(self, request, *args, **kwargs):
         
         session_key = request.headers.get('SessionKey')
@@ -537,7 +535,6 @@ class AnswerSubmit(APIView):
         explain = request.POST.get('explain')
         chapter=request.POST.get('topic_ids')
         student_time=request.POST.get('study_time_seconds')
-        print(student_time)
         if not student_time:
             student_time = 0
         timezone_name = "Asia/Kolkata"
@@ -550,13 +547,13 @@ class AnswerSubmit(APIView):
             gap_analysis_object.question_image_base64 = request.POST.get('ques_img')
         else:
             gap_analysis_object.question_image_base64 = "No image for question"
-        blank_file="iVBORw0KGgoAAAANSUhEUgAAB4AAAAQ4CAYAAADo08FDAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAACiySURBVHhe7dkBDQAADMOg+ze9+2jABjcAAAAAAAAAEgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAAAQIYABAAAAAAAAIgQwAAAAAAAAQIQABgAAAAAAAIgQwAAAAAAAAAARAhgAAAAAAAAgQgADAAAAAAAARAhgAAAAAAAAgAgBDAAAAAAAABAhgAEAAAAAAAAiBDAAAAAAAABAhAAGAAAAAAAAiBDAAAAAAAAAABECGAAAAAAAACBCAAMAAAAAAABECGAAAAAAAACACAEMAAAAAAAAECGAAQAAAAAAACIEMAAAAAAAAECEAAYAAAAAAACIEMAAAAAAAAAAEQIYAAAAAAAAIEIAAwAAAAAAAEQIYAAAAAAAAIAIAQwAAAAAAACQsD3xz9NpPFRbdgAAAABJRU5ErkJggg=="
+        
 
         if 'ques_img' in request.POST:
             q_image_binary= request.POST.get('ques_img')
       
         else:
-            q_image_binary = blank_file
+            q_image_binary = self.get_default_image_base64()
 
         if 'ans_img' in request.FILES:
             image = request.FILES.get('ans_img')
@@ -564,11 +561,9 @@ class AnswerSubmit(APIView):
         else:
             image_binary = "image not submitted"
         gap_analysis_object.student_answer_base64 = image_binary
-        print("request is successfull")
-        
+
 
         class_obj = classes.objects.get(class_code=str(class_id))
-        print(class_obj)
 
         topic_ids_str = request.POST.get('topic_ids')  # This may come as a comma-separated string
  
@@ -647,7 +642,7 @@ class AnswerSubmit(APIView):
             data['question_marks'] = 10
             data['total_marks'] = 10
             data['key'] = 'correct'
-            if ai_corr['question_image_base64']==blank_file:
+            if ai_corr['question_image_base64']== self.get_default_image_base64():
                 data['question_image_base64']=""
             else:
                 data['question_image_base64']=ai_corr['question_image_base64']
@@ -669,7 +664,7 @@ class AnswerSubmit(APIView):
         elif solve=='true':
            
             ai_explaination = self.Ai_Explaination_step_by_step([int(class_obj.class_name)], question)
-
+            
             new_stepss=[]
             if "$" in question:
                 new_string = json.loads(ai_explaination[0]['step'].replace('\\', '\\\\'))
@@ -682,6 +677,7 @@ class AnswerSubmit(APIView):
                 for steps in ai_explaination:
                     new_stepss.append(steps['step'])
             ai_explaination = new_stepss
+            
             data['question'] = question
             data['ai_explaination'] = new_stepss
             data['obtained_marks'] = 0
@@ -1080,14 +1076,18 @@ class QuestionImageview(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # print(request.data)
         class_code = request.data.get('classid')
         subject_code = request.data.get('subjectid')
         topic_code = request.data.get('topicid')
+        worksheets=request.data.get('worksheets')
+        worksheet_name = request.data.get('worksheet_name')
+        # print(worksheets)
         solved = request.data.get('solved')
         # print(solved)
         exercise = request.data.get('exercise')
         external = request.data.get('external')
-        
+        # level=request.data.get('level')
         subtopic=request.data.get('subtopic')
         if not isinstance(topic_code, list):
             topic_code = [topic_code]
@@ -1115,8 +1115,21 @@ class QuestionImageview(APIView):
         
         # Create an empty list to store all questions
         all_questions = []
-        # Get questions for each topic
-        # print(all_questions)
+
+        if worksheets:
+            # Filter worksheets based on class_code, subject_code, and topic_code
+            worksheet_objects = Worksheet.objects.filter(
+                class_code=class_code,
+                subject_code=subject_code,
+                topic_code__in=topic_code
+            ).order_by('worksheet_name').distinct('worksheet_name')
+        
+            serializer_worksheet = WorksheetNameSerializer(worksheet_objects, many=True)
+            return Response({"worksheets": serializer_worksheet.data})
+        if worksheet_name:
+            worksheet_question=Worksheet.objects.filter(worksheet_name=worksheet_name)
+            serializer_worksheet_question = WorksheetSerializer(worksheet_question, many=True)
+            return Response({"questions": serializer_worksheet_question.data})
         if subtopic:
             for topic in topic_code:
                 questions = QuestionWithImage.objects.filter(
@@ -1145,21 +1158,24 @@ class QuestionImageview(APIView):
         # If we have more than 5 questions in total, randomly select 5
         if len(all_questions) > 5:
             all_questions = sample(all_questions, 5)
-        print(all_questions)
+        # print(all_questions)
         serializer = QuestionWithImageSerializer(all_questions, many=True)
         return Response({"questions": serializer.data})
 
-from langchain.chat_models import ChatOpenAI
+# from langchain.chat_models import ChatOpenAI
+# from langchain_community.chat_models import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.schema import HumanMessage, SystemMessage
-
+import os
+from dotenv import load_dotenv
+load_dotenv()
 import re
-apikey=""
 class SimilarQuestionsAPIView(APIView):
     permission_classes = [IsAuthenticated]
     
     def generate_similar_question(self, question):
         """Generate a similar question for conceptual understanding."""
-        llm = ChatOpenAI(model_name="gpt-4o",api_key=apikey)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash",api_key=os.getenv('GEMINI_API_KEY'))
         
         system_prompt = """You are an educational assistant. Given a question, 
         generate 1 similar question that tests the same concept in a different way.
@@ -1178,12 +1194,11 @@ class SimilarQuestionsAPIView(APIView):
         except Exception as e:
             print("🔥 Error from LLM:", str(e))
             return Response({"error": str(e)}, status=500)
-        response = llm.invoke(messages)
-        return response.content
+
     
     def get_theoretical_explanation(self, question):
         """Get theoretical knowledge and explanation for the given question."""
-        llm = ChatOpenAI(model_name="gpt-4o",api_key=apikey)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash",api_key=os.getenv('GEMINI_API_KEY'))
         
         system_prompt = """You are an expert educational tutor. For the given question, provide a detailed and structured explanation in the following format:
 
@@ -1339,7 +1354,55 @@ class GapAnalysisAPIView(APIView):
             "data": list(gap_entries)
         }, status=status.HTTP_200_OK)
 
+def call_agent_api(payload):
+    """
+    Helper function to call the agent API with the given payload.
+    Returns the JSON response or error.
+    
+    """
+    url = "https://your-agent-api-url.com/endpoint"  
+    import requests
+    try:
+        response = requests.post(url, json=payload)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        return {"error": f"Agent API call failed: {str(e)}"}
 
+class GapAnalysisReportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        print(request.data)
+        # student_username = request.data.get('student_username')
+        # session_data = request.data.get('session_data', [])
+
+        # if not student_username or not session_data:
+        #     return Response(
+        #         {"error": "student_username and session_data are required."},
+        #         status=status.HTTP_400_BAD_REQUEST
+        #     )
+
+        # # Segregate/process data as needed
+        # filtered_data = [entry for entry in session_data if entry.get('student_username') == student_username]
+
+        # # Prepare payload for agent API
+        # payload = {
+        #     "student_username": student_username,
+        #     "session_data": filtered_data
+        # }
+
+
+        # # Use the helper function to make the API call
+        # agent_json = call_agent_api(payload)
+
+        # Return the agent's JSON response to the frontend
+        return Response({
+            "status": "success",
+            "report": "gap analysis report data here",
+        }, status=status.HTTP_200_OK)
+        
+        
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -1380,30 +1443,72 @@ class Questionupdateview(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        # question_id = request.data.get('question_id')
-        question_subtopic=request.data.get('subtopic')
-        question_text = request.data.get('question_text')
-        question_image = request.FILES.get('question_image')
-        print("request is successfull")
-        print(question_subtopic)
-        print(question_text)
-        # print(question_image)
-        if not question_text:
-            return Response({"error": "Question ID and text are required."}, status=status.HTTP_400_BAD_REQUEST)
+        class_number = request.data.get('class_number')
+        subject_code = request.data.get('subject_code')
+        chapter_number = request.data.get('chapter_number')  # This is topic_code
 
+        if not (class_number and subject_code and chapter_number):
+            return Response({"error": "class_number, subject_code, and chapter_number are required."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Get the Topics object (chapter) for the given codes
         try:
-            question = QuestionWithImage.objects.get(question=question_text)
-            question.question = question_text
-            if question_image:
-                question.question_image = question_image
-                print("image is updated")
-            if question_subtopic:
-                question.sub_topic_code = question_subtopic
-                print("subtopic is updated")
-            question.save()
-            return Response({"message": "Question updated successfully."}, status=status.HTTP_200_OK)
-        except QuestionWithImage.DoesNotExist:
-            return Response({"error": "Question not found."}, status=status.HTTP_404_NOT_FOUND)
+            chapter_obj = Topics.objects.select_related('subject__class_name').get(
+                topic_code=chapter_number,
+                subject__subject_code=subject_code,
+                subject__class_name__class_code=class_number
+            )
+            chapter_name = chapter_obj.name
+            # print("Topic Name:", chapter_name)
+        except Topics.DoesNotExist:
+            return Response({"error": "Chapter not found for the given subject, class, and chapter_number."},
+                            status=status.HTTP_404_NOT_FOUND)
+
+
+        # Fetch all questions matching the filters
+        questions = QuestionWithImage.objects.filter(
+            class_code=class_number,
+            subject_code=subject_code,
+            topic_code=chapter_number
+        )
+
+        if not questions.exists():
+            return Response({"error": "No questions found for the given filters."},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        updated_questions = []
+        for question_obj in questions:
+            # Prepare payload for external API
+            payload = {
+                "question": question_obj.question,
+                "class_number": int(class_number),
+                "subject_name": subject_code,
+                "chapter_name": chapter_name,  # Use the actual chapter name
+            }
+            # print(payload)
+            # Call the external API (replace with your actual API URL)
+            try:
+                response = requests.post("http://localhost:8001/decide_question_level/", json=payload)
+                if response.status_code == 200:
+                    level_text = response.json().get('level')
+                    print(question_obj.question, "Level:", level_text)
+                    if level_text:
+                        question_obj.level = level_text
+                        question_obj.save()
+                        updated_questions.append({
+                            # "id": question_obj.id,
+                            "question": question_obj.question,
+                            "level": level_text
+                        })
+                else:
+                    continue
+            except Exception as e:
+                continue
+
+        return Response({
+            "message": "Questions updated successfully.",
+            "updated_questions": updated_questions
+        }, status=status.HTTP_200_OK)
 
 
 
@@ -1546,13 +1651,41 @@ class AddHomeworkAPIView(APIView):
         teacher = request.user
         if not getattr(teacher, 'is_teacher', False):
             return Response({"error": "Only teachers can add homework."}, status=status.HTTP_403_FORBIDDEN)
-        
+
+        attachment_base64 = None
+
+        # Handle in-memory uploaded file
+        if 'image' in request.FILES:
+            file_obj = request.FILES['image']
+            attachment_base64 = base64.b64encode(file_obj.read()).decode('utf-8')
+            request.data['attachment'] = attachment_base64
+        elif request.data.get('description'):
+            # If already a base64 string from frontend
+            attachment = request.data.get('description')
+            if isinstance(attachment, str):
+                request.data['attachment'] = attachment
+
         serializer = HomeworkSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(teacher=teacher)
             return Response({"message": "Homework added successfully.", "data": serializer.data}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+# class WorkSheetsApiview(APIView):
+#     permission_classes = [IsAuthenticated]
 
+#     def get(self, request, *args, **kwargs):
+#         """
+#         API endpoint to retrieve all worksheets for the authenticated user.
+#         """
+#         user = request.user
+#         if not getattr(user, 'is_teacher', False):
+#             return Response({"error": "Only teachers can view worksheets."}, status=status.HTTP_403_FORBIDDEN)
+
+#         worksheets = Homework.objects.filter(teacher=user)
+#         serializer = HomeworkSerializer(worksheets, many=True)
+#         return Response(serializer.data, status=status.HTTP_200_OK)
+    
 from myapp.models import Notification
 from myapp.serializers import NotificationSerializer
 
@@ -1645,3 +1778,554 @@ class HomeworkSubmissionAPIView(APIView):
         submissions = HomeworkSubmission.objects.filter(student=request.user)
         serializer = HomeworkSubmissionSerializer(submissions, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+import os
+import zipfile
+import tempfile
+import random
+import time
+import pandas as pd
+import io
+import requests
+import json
+import base64
+# from pathlib import Path
+# from dotenv import load_dotenv
+# from PIL import Image
+
+from crewai import Crew, Task, Agent, LLM, Process
+from typing import List, Optional
+from crewai_tools import FileWriterTool
+from pydantic import BaseModel, Field
+
+from django.http import JsonResponse, HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework import status
+from Users.permissions import IsTeacher
+
+from dotenv import load_dotenv
+load_dotenv()
+class Question(BaseModel):
+    question: str = Field(description="Full text of the question including all parts")
+    has_diagram: bool = Field(description="Whether the question includes a diagram (True/False)")
+    diagram_path: Optional[str] = Field(description="Path to the diagram if present, otherwise None")
+
+class QuestionsChunk(BaseModel):
+    questions: List[Question] = Field(description="List of questions found in this chunk")
+
+class WorkSheetsApiview(APIView):
+    permission_classes = [IsTeacher]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.app_id = "orcalex_08a571_d71d85"
+        self.app_key = os.getenv("MATHPIX_API_KEY")
+        self.gemini_key = os.getenv("GEMINI_API_KEY")
+        self.llm = None
+
+        if self.gemini_key:
+            self.llm = LLM(model='gemini/gemini-2.0-flash', api_key=self.gemini_key)
+    
+    def post(self, request):
+        try:
+            validation_response = self._validate_api_keys()
+            if validation_response:
+                return validation_response
+
+            file_validation_response = self._validate_uploaded_file(request)
+            if file_validation_response:
+                return file_validation_response
+
+            # Get additional required fields from request
+            class_code = request.data.get('class_code')
+            subject_code = request.data.get('subject_code')
+            topic_code = request.data.get('topic_code')
+            worksheet_name = request.data.get('worksheet_name')
+            due_date = request.data.get('due_date')  # Optional
+
+            # Validate required fields
+            if not all([class_code, subject_code, topic_code, worksheet_name]):
+                return Response({
+                    'error': 'class_code, subject_code, topic_code, and worksheet_name are required',
+                    'success': False
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            uploaded_file = request.FILES['file']
+
+            success, latex_content, zip_path, error = self._process_docx_with_mathpix(uploaded_file)
+            if not success:
+                return Response({
+                    'error': f'Mathpix processing failed: {error}',
+                    'success': False
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            csv_path = self._process_latex_with_crewai(latex_content)
+            if not csv_path or not os.path.exists(csv_path):
+                return Response({
+                    'error': 'Failed to extract questions',
+                    'success': False
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            success, questions_data, total_questions = self._read_questions_with_diagrams(csv_path, zip_path)
+            print(f"Question keys: {questions_data[0].keys() if questions_data else 'No questions'}")
+            
+            if not success:
+                return Response({
+                    'error': f'Failed to read questions: {questions_data}',
+                    'success': False
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            # Save questions to Worksheet model
+            saved_worksheets = []
+            teacher = request.user
+
+            try:
+                # Parse due_date if provided
+                parsed_due_date = None
+                if due_date:
+                    from datetime import datetime
+                    import pytz
+                    try:
+                        # Assuming due_date is in ISO format or similar
+                        if isinstance(due_date, str):
+                            parsed_due_date = datetime.fromisoformat(due_date.replace('Z', '+00:00'))
+                        else:
+                            parsed_due_date = due_date
+                    except ValueError:
+                        # If parsing fails, set to None and log warning
+                        print(f"Warning: Could not parse due_date: {due_date}")
+                        parsed_due_date = None
+
+                # Create worksheet entries for each question
+                for question_data in questions_data:
+                    # Create worksheet instance
+                    worksheet = Worksheet.objects.create(
+                        teacher=teacher,
+                        class_code=class_code,
+                        subject_code=subject_code,
+                        topic_code=topic_code,
+                        worksheet_name=worksheet_name,
+                        question=question_data.get('question', ''),
+                        question_image=question_data.get('diagram_image', ''),  # Base64 image data
+                        due_date=parsed_due_date
+                    )
+                    
+                    saved_worksheets.append({
+                        'id': worksheet.id,
+                        'question_id': question_data.get('id'),
+                        'question_text': question_data.get('question', '')[:100] + '...' if len(question_data.get('question', '')) > 100 else question_data.get('question', ''),
+                        'has_diagram': question_data.get('has_diagram', False),
+                        'worksheet_name': worksheet.worksheet_name
+                    })
+
+                # Clean up temporary files
+                try:
+                    if csv_path and os.path.exists(csv_path):
+                        os.remove(csv_path)
+                    if zip_path and os.path.exists(zip_path):
+                        os.remove(zip_path)
+                except Exception as cleanup_error:
+                    print(f"Warning: Could not clean up temporary files: {cleanup_error}")
+
+            except Exception as db_error:
+                return Response({
+                    'error': f'Failed to save questions to database: {str(db_error)}',
+                    'success': False
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            response_data = {
+                'success': True,
+                'message': f'Successfully extracted and saved {total_questions} questions to worksheets',
+                'total_questions': total_questions,
+                'saved_worksheets': saved_worksheets,
+                'summary': {
+                    'class_code': class_code,
+                    'subject_code': subject_code,
+                    'topic_code': topic_code,
+                    'worksheet_name': worksheet_name,
+                    'due_date': due_date,
+                    'questions_with_diagrams': len([q for q in questions_data if q.get('has_diagram', False)]),
+                    'questions_without_diagrams': len([q for q in questions_data if not q.get('has_diagram', False)])
+                },
+                'files': {
+                    'csv_filename': os.path.basename(csv_path),
+                    'processed': True
+                }
+            }
+
+            return Response(response_data, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({
+                'error': f'Unexpected error: {str(e)}',
+                'success': False
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    def get(self, request):
+        action = request.GET.get('action')
+
+        if action == 'health':
+            return self._health_check()
+        elif action == 'download_csv':
+            filename = request.GET.get('filename')
+            return self._download_file(filename, 'text/csv')
+        elif action == 'download_zip':
+            filename = request.GET.get('filename')
+            return self._download_file(filename, 'application/zip')
+        else:
+            return Response({
+                'message': 'WorkSheets API',
+                'endpoints': {
+                    'POST /': 'Upload DOCX file to extract questions',
+                    'GET /?action=health': 'Health check',
+                    'GET /?action=download_csv&filename=<name>': 'Download CSV file',
+                    'GET /?action=download_zip&filename=<name>': 'Download ZIP file'
+                }
+            })
+
+    # --- All helper methods from QuestionExtractorAPIView below ---
+
+    def _validate_api_keys(self):
+        missing_keys = []
+        if not self.app_key:
+            missing_keys.append("MATHPIX_API_KEY")
+        if not self.gemini_key:
+            missing_keys.append("GEMINI_API_KEY")
+
+        if missing_keys:
+            return Response({
+                'error': f"Missing API keys: {', '.join(missing_keys)}",
+                'success': False
+            }, status=status.HTTP_400_BAD_REQUEST)
+        return None
+
+    def _validate_uploaded_file(self, request):
+        if 'file' not in request.FILES:
+            return Response({
+                'error': 'No file uploaded',
+                'success': False
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        uploaded_file = request.FILES['file']
+        if not uploaded_file.name.lower().endswith('.docx'):
+            return Response({
+                'error': 'Only DOCX files are allowed',
+                'success': False
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return None
+
+    def _process_docx_with_mathpix(self, uploaded_file):
+        tmp_docx_path = None
+
+        try:
+            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.docx')
+            for chunk in uploaded_file.chunks():
+                tmp_file.write(chunk)
+            tmp_file.close()
+            tmp_docx_path = tmp_file.name
+
+            options = {
+                "conversion_formats": {"tex.zip": True},
+                "math_inline_delimiters": ["$", "$"],
+                "math_display_delimiters":["$", "$"],
+                "rm_spaces": True,
+                "remove_section_numbering":True
+            }
+
+            headers = {
+                "app_id": self.app_id,
+                "app_key": self.app_key
+            }
+
+            with open(tmp_docx_path, "rb") as file_handle:
+                files = {"file": file_handle}
+                data = {"options_json": json.dumps(options)}
+
+                response = requests.post(
+                    "https://api.mathpix.com/v3/pdf",
+                    headers=headers,
+                    data=data,
+                    files=files
+                )
+
+            if response.status_code != 200:
+                return False, None, None, f"Upload failed: {response.text}"
+
+            result = response.json()
+            pdf_id = result.get("pdf_id")
+
+            if not pdf_id:
+                return False, None, None, "No PDF ID returned from Mathpix"
+
+            headers_status = {
+                "app_id": self.app_id,
+                "app_key": self.app_key
+            }
+
+            max_attempts = 60
+            attempt = 0
+
+            while attempt < max_attempts:
+                status_response = requests.get(
+                    f"https://api.mathpix.com/v3/pdf/{pdf_id}",
+                    headers=headers_status
+                )
+
+                if status_response.status_code == 200:
+                    status_data = status_response.json()
+                    status_val = status_data.get("status")
+
+                    if status_val == "completed":
+                        break
+                    elif status_val == "error":
+                        return False, None, None, "Processing failed with error"
+
+                    time.sleep(5)
+                    attempt += 1
+                else:
+                    return False, None, None, f"Status check failed: {status_response.text}"
+
+            if attempt >= max_attempts:
+                return False, None, None, "Processing timeout - took too long to complete"
+
+            conversion_response = requests.get(
+                f"https://api.mathpix.com/v3/converter/{pdf_id}",
+                headers=headers_status
+            )
+
+            if conversion_response.status_code == 200:
+                conversion_data = conversion_response.json()
+                tex_status = conversion_data.get("conversion_status", {}).get("tex.zip", {}).get("status")
+
+                if tex_status != "completed":
+                    time.sleep(10)
+
+            tex_response = requests.get(
+                f"https://api.mathpix.com/v3/pdf/{pdf_id}.tex",
+                headers=headers_status
+            )
+
+            if tex_response.status_code != 200:
+                return False, None, None, f"Failed to download LaTeX: {tex_response.text}"
+
+            random_number = random.randint(100, 999)
+            zip_path = f'outputs_{random_number}.zip'
+
+            with open(zip_path, 'wb') as f:
+                f.write(tex_response.content)
+
+            latex_content = self._extract_latex_from_zip(zip_path)
+
+            return True, latex_content, zip_path, None
+
+        except Exception as e:
+            return False, None, None, str(e)
+
+        finally:
+            if tmp_docx_path and os.path.exists(tmp_docx_path):
+                try:
+                    time.sleep(0.5)
+                    os.unlink(tmp_docx_path)
+                except Exception:
+                    pass
+
+    def _extract_latex_from_zip(self, zip_file_path):
+        latex_content = ""
+
+        try:
+            with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+                file_list = zip_ref.namelist()
+
+                latex_file = None
+                for file_name in file_list:
+                    if file_name.endswith('.tex'):
+                        latex_file = file_name
+                        break
+
+                if latex_file:
+                    with zip_ref.open(latex_file) as latex_file_obj:
+                        latex_content = latex_file_obj.read().decode('utf-8')
+                else:
+                    for file_name in file_list:
+                        if file_name.endswith(('.txt', '.md')):
+                            with zip_ref.open(file_name) as text_file_obj:
+                                latex_content = text_file_obj.read().decode('utf-8')
+                            break
+
+        except Exception as e:
+            pass
+
+        return latex_content
+
+    def _create_agents_and_tasks(self, random_suffix):
+        question_extractor = Agent(
+            role="Question Extractor",
+            goal="Extract questions and potential diagram references from textbook content",
+            llm=self.llm,
+            backstory="You are an expert at identifying questions and their associated diagrams from academic textbooks. You exactly extract question, question diagram path etc. You are expert in understanding rules",
+            verbose=False
+        )
+
+        csv_writer_agent = Agent(
+            role="CSV Creator",
+            llm=self.llm,
+            backstory="You are an expert at organizing validated data into structured CSV files. You also make sure there is no data overlap",
+            goal="Create a properly formatted CSV file with verified question data",
+            tools=[FileWriterTool()],
+            verbose=False
+        )
+
+        question_extracting_task = Task(
+            agent=question_extractor,
+            description="""
+            Extract ALL questions from the provided textbook content. Include both example questions and exercise questions. Remember any paragraph having what is... is not a question; question will have numbers like Example 1 or Exercise 1 before them - only extract those questions.
+
+            For each question:
+            1.You job is to extract full question.
+            2. Include the complete question text with all parts
+            # Imp: If the question has sub questions like (i) (ii) include all of them in single question
+            3. Preserve any mathematical formulas in LaTeX format
+            4. Check if the question potentially references a diagram with phrases like "see Fig.", "shown in Figure", etc.
+            5. If there's a potential diagram reference, look for \\includegraphics tags after the present question and before next question
+            6. Extract the diagram path from inside the curly braces (e.g., "2025_04_10_a729a715c33d0c3f0f31g-02")
+            7. Be careful to link image to a question understand near by text and then assign
+
+            8. If a diagram does not have explicitly mentioned an image dont associate any image with it
+            Be thorough but don't assume a diagram exists unless there's explicit evidence.
+
+            Textbook content: {content}
+            """,
+            output_pydantic=QuestionsChunk,
+            expected_output="A comprehensive list of all questions with their potential diagram references"
+        )
+
+        csv_creating_task = Task(
+            description=f"""
+            Create a CSV file named 'verified_questions_{random_suffix}.csv' with the following columns:
+
+            - question (full question text)
+            - has_diagram (boolean True/False)
+            - diagram_path (path if has_diagram is True, empty string if False)
+
+            Use the verified questions data from the previous task.
+            Ensure proper CSV formatting with appropriate handling of quotes, commas, and newlines in the question text.
+            Make sure there is no overlap of data like question in has_diagram field etc.
+            """,
+            context=[question_extracting_task],
+            expected_output=f"Create a properly formatted CSV file 'verified_questions_{random_suffix}.csv' containing all verified questions and their diagram information",
+            agent=csv_writer_agent
+        )
+
+        return [question_extractor, csv_writer_agent], [question_extracting_task, csv_creating_task]
+
+    def _process_latex_content(self, latex_content, random_suffix):
+        agents, tasks = self._create_agents_and_tasks(random_suffix)
+
+        crew = Crew(
+            agents=agents,
+            tasks=tasks,
+            process=Process.sequential,
+            verbose=False
+        )
+
+        result = crew.kickoff({'content': latex_content})
+        return result
+
+    def _process_latex_with_crewai(self, latex_content):
+        random_suffix = random.randint(100, 999)
+        self._process_latex_content(latex_content, random_suffix)
+        csv_file = f'verified_questions_{random_suffix}.csv'
+        time.sleep(15)
+        if os.path.exists(csv_file):
+            return csv_file
+        else:
+            return None
+
+    def _read_questions_with_diagrams(self, csv_path, zip_path):
+        try:
+            df = pd.read_csv(csv_path)
+            image_files = {}
+            try:
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    for file_name in zip_ref.namelist():
+                        if file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+                            image_data = zip_ref.read(file_name)
+                            image_base64 = base64.b64encode(image_data).decode('utf-8')
+                            image_files[os.path.basename(file_name)] = image_base64
+                            image_files[file_name] = image_base64
+            except Exception as e:
+                pass
+
+            questions_data = []
+            for idx, row in df.iterrows():
+                question_data = {
+                    'id': idx + 1,
+                    'question': row['question'],
+                    'has_diagram': row['has_diagram'],
+                    'diagram_path': row['diagram_path'] if pd.notna(row['diagram_path']) else None,
+                    # 'diagram_image': None
+                }
+
+                if row['has_diagram'] and pd.notna(row['diagram_path']) and row['diagram_path']:
+                    diagram_path = str(row['diagram_path']).strip()
+                    possible_keys = [
+                        diagram_path,
+                        f"{diagram_path}.png",
+                        f"{diagram_path}.jpg",
+                        f"{diagram_path}.jpeg",
+                        os.path.basename(diagram_path),
+                        f"{os.path.basename(diagram_path)}.png",
+                        f"{os.path.basename(diagram_path)}.jpg",
+                        f"{os.path.basename(diagram_path)}.jpeg"
+                    ]
+                    for key in possible_keys:
+                        if key in image_files:
+                            question_data['diagram_image'] = image_files[key]
+                            break
+
+                questions_data.append(question_data)
+                
+            return True, questions_data, len(df)
+
+        except Exception as e:
+            return False, None, str(e)
+
+    def _health_check(self):
+        return Response({
+            'status': 'healthy',
+            'message': 'WorkSheets API is running',
+            'api_keys_status': {
+                'mathpix': bool(self.app_key),
+                'gemini': bool(self.gemini_key)
+            }
+        })
+
+    def _download_file(self, filename, content_type):
+        try:
+            if not filename:
+                return Response({
+                    'error': 'Filename parameter required',
+                    'success': False
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            file_path = filename
+            if os.path.exists(file_path):
+                with open(file_path, 'rb') as f:
+                    response = HttpResponse(f.read(), content_type=content_type)
+                    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                    return response
+            else:
+                return Response({
+                    'error': 'File not found',
+                    'success': False
+                }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': f'Error downloading file: {str(e)}',
+                'success': False
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

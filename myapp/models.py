@@ -110,13 +110,30 @@ class QuestionWithImage(models.Model):
     question_image = models.TextField(null=True, blank=True)
     typed = models.TextField(null=True, blank=True)
     sub_topic_code = models.TextField(null=True, blank=True)
+    level=models.TextField(null=True, blank=True)  # Added level field
     # Make field optional
     # typed=models.TextField(null=True,blank=True)
     def __str__(self):
         return f"{self.class_code} - {self.subject_code} - {self.topic_code} - {self.question[:30]}"
 
-
-
+class Worksheet(models.Model): 
+    teacher = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        limit_choices_to={'is_teacher': True},
+        related_name='worksheets'
+    )
+    class_code = models.CharField(max_length=50)
+    subject_code = models.CharField(max_length=50)  
+    topic_code = models.CharField(max_length=50)
+    worksheet_name = models.CharField(max_length=255)
+    question= models.TextField(null=True, blank=True)
+    question_image = models.TextField(null=True, blank=True)
+    date_created = models.DateTimeField(auto_now_add=True)
+    due_date = models.DateTimeField(null=True, blank=True)
+    def __str__(self):
+        return f"{self.worksheet_name}"
+        
  
 class GapAnalysis(models.Model): 
     student = models.ForeignKey(Student, on_delete=models.CASCADE)

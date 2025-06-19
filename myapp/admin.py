@@ -1,6 +1,6 @@
 
 from django.contrib import admin
-from .models import classes,Subject, Topics, SubTopics, Question_Answers,QuestionWithImage,GapAnalysis,Homework,Notification,HomeworkSubmission
+from .models import classes,Subject, Topics, SubTopics, Question_Answers,QuestionWithImage,GapAnalysis,Homework,Notification,HomeworkSubmission,Worksheet
 admin.site.register(classes)
 admin.site.register(Subject)
 admin.site.register(Topics)
@@ -11,6 +11,7 @@ admin.site.register(GapAnalysis)
 admin.site.register(Homework)
 admin.site.register(Notification)
 admin.site.register(HomeworkSubmission) 
+admin.site.register(Worksheet)
 from django.contrib.sessions.models import Session
 from django.contrib import admin
 from django.contrib.sessions.models import Session
