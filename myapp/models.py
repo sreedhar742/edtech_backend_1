@@ -108,6 +108,7 @@ class QuestionWithImage(models.Model):
     
     question = models.TextField()
     question_image = models.TextField(null=True, blank=True)
+    answer= models.TextField(null=True, blank=True)
     typed = models.TextField(null=True, blank=True)
     sub_topic_code = models.TextField(null=True, blank=True)
     level=models.TextField(null=True, blank=True)  # Added level field

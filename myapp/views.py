@@ -1510,7 +1510,77 @@ class Questionupdateview(APIView):
             "updated_questions": updated_questions
         }, status=status.HTTP_200_OK)
 
+class Questionanswerupdateview(APIView):
+    permission_classes = [IsAuthenticated]
 
+    def post(self, request, *args, **kwargs):
+        class_number = request.data.get('class_number')
+        subject_code = request.data.get('subject_code')
+        chapter_number = request.data.get('chapter_number')  # This is topic_code
+
+        if not (class_number and subject_code and chapter_number):
+            return Response({"error": "class_number, subject_code, and chapter_number are required."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Get the Topics object (chapter) for the given codes
+        try:
+            chapter_obj = Topics.objects.select_related('subject__class_name').get(
+                topic_code=chapter_number,
+                subject__subject_code=subject_code,
+                subject__class_name__class_code=class_number
+            )
+            chapter_name = chapter_obj.name
+            # print("Topic Name:", chapter_name)
+        except Topics.DoesNotExist:
+            return Response({"error": "Chapter not found for the given subject, class, and chapter_number."},
+                            status=status.HTTP_404_NOT_FOUND)
+
+
+        # Fetch all questions matching the filters
+        questions = QuestionWithImage.objects.filter(
+            class_code=class_number,
+            subject_code=subject_code,
+            topic_code=chapter_number
+        )
+
+        if not questions.exists():
+            return Response({"error": "No questions found for the given filters."},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        updated_questions = []
+        for question_obj in questions:
+            # Prepare payload for external API
+            payload = {
+                "question": question_obj.question,
+                "question_image_base64": question_obj.question_image,
+                "class_number": int(class_number),
+                "subject_name": subject_code,
+                "chapter_name": chapter_name,  # Use the actual chapter name
+            }
+            # print(payload)
+            # Call the external API (replace with your actual API URL)
+            # try:
+            #     response = requests.post("http://localhost:8001/answer/", json=payload)
+            #     if response.status_code == 200:
+            #         answer_text = response.json().get('answer')
+            #         print(question_obj.question, "answer:", answer_text)
+            #         if answer_text:
+            #             question_obj.level = answer_text
+            #             question_obj.save()
+            #             updated_questions.append({
+            #                 # "id": question_obj.id,
+            #                 "question": question_obj.question,
+            #                 "answer": answer_text
+            #             })
+            #     else:
+            #         continue
+            # except Exception as e:
+            #     continue
+            updated_questions.append(payload)
+        return Response({
+            "message": "Questions updated successfully.",
+            "updated_questions": updated_questions
+        }, status=status.HTTP_200_OK)
 
 class UserAverageScoreAPIView(APIView):
     permission_classes = [IsAuthenticated]
